@@ -1,0 +1,238 @@
+---
+title: "Unemployment & Inflation in Japan"
+author: "Cole Geller"
+date: "2026-04-30"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(knitr)
+library(forecast)
+library(sandwich)
+library(lmtest)
+library(tseries)
+```
+
+# Introduction
+
+This report applies the Box-Jenkins methodology to analyze unemployment and inflation in Japan. The goal is to identify statistical time series models that best describe each series and provide context for discussions of fiscal and monetary policy.
+
+Understanding the dynamics of unemployment and inflation is important because both variables play a central role in macroeconomic policy decisions. Unemployment reflects labor market conditions and overall economic activity, while inflation captures price stability, which is a primary objective of central banks. Modeling these variables helps provide insight into how economic shocks evolve over time and how persistent their effects may be.
+
+The analysis follows three stages: identification, estimation, and diagnostic checking. In the identification stage, I examine the time series plots, autocorrelation functions, and partial autocorrelation functions. In the estimation stage, I estimate plausible ARMA models suggested by the ACF and PACF. In the diagnostic checking stage, I examine the residuals of the preferred models.
+
+Based on this process, I select an AR(2) model for Japan’s unemployment rate and an ARMA(1,1) model for Japan’s inflation rate.
+
+
+
+# Data
+
+The data used in this report were retrieved from the _[Federal Reserve Bank of St. Louis (FRED)](https://fred.stlouisfed.org/)_. Both datasets were sourced from the _Organization for Economic Co-operation and Development_.
+
+The unemployment dataset reports the quarterly, seasonally-adjusted unemployment rate for individuals aged 15 and over in Japan from 1955 to 2025. The inflation dataset reports the quarterly growth rate of Japan's Consumer Price Index relative to the previous period from 1955 to 2021. To express inflation at an annualized rate, the quarterly growth rate is multiplied by a factor of four, consistent with the approximation used in class for annualizing quarterly percentage changes.
+
+```{r data, echo = FALSE}
+setwd("C:/Users/coleg/OneDrive - UC San Diego/Spring 2026 Courses/Econ 112/Writing Assignment 1/data")
+
+unemployment_data <- read.table("japan_unemployment_data.csv", header = T, sep = ',')
+inflation_data <- read.table("japan_inflation_data.csv", header = T, sep = ',')
+
+unemployment <- ts(unemployment_data[,2],start=1955,frequency=4)
+inflation <- ts(inflation_data[,2],start=1955,frequency=4)
+
+inflation <- 4*inflation
+```
+
+## Unemployment
+```{r unemployment-summary}
+kable(data.frame(
+  Min = min(unemployment),
+  Q1 = quantile(unemployment, 0.25),
+  Median = median(unemployment),
+  Mean = mean(unemployment),
+  Q3 = quantile(unemployment, 0.75),
+  Max = max(unemployment)
+), digits = 2, caption = "Summary Statistics: Unemployment Rate")
+```
+
+```{r unemployment-plot, echo = FALSE}
+plot(unemployment,
+     main = "Quarterly Unemployment Rate in Japan",
+     xlab = "Time",
+     ylab = "Percent",
+     type = "l")
+```
+Figure 1: Quarterly Unemployment Rate in Japan.
+
+
+Japan’s unemployment rate is relatively low over the sample period, with an average near 2.7 percent. However, the series is highly persistent. It declines during the earlier part of the sample, rises substantially during the 1990s and early 2000s, and then gradually falls after the late 2000s.
+
+
+
+
+## Inflation
+```{r inflation-summary}
+kable(data.frame(
+  Min = min(inflation),
+  Q1 = quantile(inflation, 0.25),
+  Median = median(inflation),
+  Mean = mean(inflation),
+  Q3 = quantile(inflation, 0.75),
+  Max = max(inflation)
+), digits = 2, caption = "Summary Statistics: Inflation Rate")
+```
+
+```{r inflation-plot, echo = FALSE}
+plot(inflation,
+     main = "Quarterly CPI Inflation in Japan (Annualized)",
+     xlab = "Time",
+     ylab = "Annualized Percent",
+     type = "l")
+```
+Figure 2: Quarterly CPI Inflation in Japan (Annualized).
+
+Inflation is more volatile than unemployment. The largest movements occur during the 1970s, when Japan experienced large inflation spikes. Outside of this period, inflation is generally lower and fluctuates closer to zero.
+
+
+
+# Preferred Specification
+
+The Box-Jenkins procedure consists of three stages:
+
+1. __Identification__: Use plots, ACF, and PACF to determine plausible ARMA models
+2. __Estimation__: Fit candidate models and compare using information criteria (i.e. AIC, BIC)
+3. __Diagnostic Checking__: Evaluate whether residuals resemble white noise and confirm model choice
+
+
+## Identification Stage
+
+### Unemployment
+
+```{r unemployment-identification}
+acf(unemployment,main="Autocorrelation of Unemployment Rate, Japan")
+pacf(unemployment,main="Partial Autocorrelation of Unemployment Rate, Japan")
+```
+The ACF decays slowly and remains positive across many lags, indicating strong persistence. The PACF shows a large spike at lag 1, suggesting that autoregressive components are important. While this persistence may indicate nonstationarity, I proceed with ARMA models in levels to remain consistent with the Box-Jenkins framework covered in class.
+
+Based on these patterns, I consider:
+
+* AR(1)
+* AR(2)
+* ARMA(1,1)
+* ARMA(2,1)
+* ARMA(1,2)
+
+
+
+### Inflation
+```{r inflation-identification}
+acf(inflation,main="Autocorrelation of Inflation Rate, Japan")
+pacf(inflation,main="Partial Autocorrelation of Inflation Rate, Japan")
+```
+The ACF declines more quickly than for unemployment, indicating weaker persistence. The PACF shows several significant spikes at early lags, suggesting that both autoregressive and moving average components may be relevant.
+
+Based on these patterns, I consider:
+
+* AR(1)
+* AR(2)
+* ARMA(1,1)
+* ARMA(2,1)
+* ARMA(1,2)
+
+
+## Estimation Stage
+
+```{r estimation-stage}
+U_AR1 <- arima(unemployment, order = c(1,0,0))
+U_AR2 <- arima(unemployment, order = c(2,0,0))
+U_ARMA11 <- arima(unemployment, order = c(1,0,1))
+U_ARMA21 <- arima(unemployment, order = c(2,0,1))
+U_ARMA12 <- arima(unemployment, order = c(1,0,2))
+
+I_AR1 <- arima(inflation, order = c(1,0,0))
+I_AR2 <- arima(inflation, order = c(2,0,0))
+I_ARMA11 <- arima(inflation, order = c(1,0,1))
+I_ARMA21 <- arima(inflation, order = c(2,0,1))
+I_ARMA12 <- arima(inflation, order = c(1,0,2))
+```
+
+```{r estimation-comparison}
+kable(AIC(U_AR1, U_AR2, U_ARMA11, U_ARMA21, U_ARMA12),
+      caption = "AIC: Unemployment Models")
+
+kable(BIC(U_AR1, U_AR2, U_ARMA11, U_ARMA21, U_ARMA12),
+      caption = "BIC: Unemployment Models")
+
+kable(AIC(I_AR1, I_AR2, I_ARMA11, I_ARMA21, I_ARMA12),
+      caption = "AIC: Inflation Models")
+
+kable(BIC(I_AR1, I_AR2, I_ARMA11, I_ARMA21, I_ARMA12),
+      caption = "BIC: Inflation Models")
+```
+For unemployment, both AIC and BIC select the AR(2) model. For inflation, both AIC and BIC select the ARMA(1,1) model. Because both AIC and BIC agree on the preferred models, the results are not sensitive to the choice of information criterion.
+
+
+
+### Preferred Models
+```{r preferred-models}
+U_best <- U_AR2
+I_best <- I_ARMA11
+
+kable(round(data.frame(
+  Estimate = coef(U_best),
+  Std_Error = sqrt(diag(U_best$var.coef))
+), 4), caption = "AR(2) Model Estimates for Unemployment")
+
+kable(round(data.frame(
+  Estimate = coef(I_best),
+  Std_Error = sqrt(diag(I_best$var.coef))
+), 4), caption = "ARMA(1,1) Model Estimates for Inflation")
+```
+The AR(2) model for unemployment indicates a high degree of persistence, meaning that shocks to unemployment have long-lasting effects. This is consistent with the slow decay observed in the ACF. In practical terms, this suggests that changes in unemployment do not dissipate quickly but instead influence future periods over multiple quarters. This persistence is consistent with labor market frictions such as hiring costs, job matching inefficiencies, and structural adjustments that slow the return to equilibrium.
+
+The ARMA(1,1) model for inflation suggests that inflation depends both on its past values and past shocks, capturing short-run dynamics that are not explained by a purely autoregressive model. This indicates that temporary disturbances, such as changes in energy prices or demand conditions, play an important role in driving inflation. At the same time, the autoregressive component reflects some persistence in inflation over time.
+
+
+
+## Diagnostic Checking
+```{r diagnostic-checking}
+u_res <- residuals(U_best)
+i_res <- residuals(I_best)
+
+plot(u_res,
+     main = "Residuals of AR(2) Unemployment Model",
+     xlab = "Time",
+     ylab = "Residuals",
+     type = "l")
+
+acf(u_res, main = "Autocorrelation of Residuals: Unemployment Model")
+
+plot(i_res,
+     main = "Residuals of ARMA(1,1) Inflation Model",
+     xlab = "Time",
+     ylab = "Residuals",
+     type = "l")
+
+acf(i_res, main = "Autocorrelation of Residuals: Inflation Model")
+```
+For unemployment, the residual autocorrelation function shows that nearly all correlations fall within the confidence bounds, indicating no remaining systematic dependence.
+
+For inflation, most residual autocorrelations lie within the bounds, with no clear pattern of persistence. The residual plot also shows higher volatility during the 1970s, suggesting that the variance of inflation may not be constant over time.
+
+
+
+# Limitations
+
+The unemployment series is highly persistent, which may indicate nonstationarity. While more advanced methods could address this, the analysis remains within the ARMA framework used in class.
+
+Inflation includes large shocks during the 1970s, which may affect model stability and suggest time-varying volatility.
+
+Finally, ARMA models describe statistical relationships but do not incorporate structural economic factors such as policy changes or external shocks. Therefore, the results should be interpreted as descriptive rather than causal.
+
+
+
+#### Note
+
+AI tools were used for feedback on organization, clarity, and wording. The data analysis, model selection, interpretation, and final edits were done by me.
