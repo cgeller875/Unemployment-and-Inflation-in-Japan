@@ -12,6 +12,7 @@ Examined time series plots, ACF, and PACF
 Estimated several AR and ARMA models
 Compared model fit using AIC and BIC
 Checked residuals to evaluate model adequacy
+
 __Key Findings__
 
 Both AIC and BIC selected an AR(2) model for unemployment, suggesting that Japan’s unemployment rate is highly persistent over time.
